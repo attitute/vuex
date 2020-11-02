@@ -11,6 +11,12 @@ export const install = (_Vue) =>{ // vue use安装
     applyMixin(Vue)
 }
 
+function getState(store, path) {
+    return path.reduce((newState, current)=>{
+        return newState[current]
+    },store.state)
+}
+
 /**
  * 
  * @param {*} store 容器
@@ -41,6 +47,9 @@ const installModule = (store, rootState, path, module)=>{
         // payload 用户使用时必传的
         store._mutations[namespace + mutationName].push((payload)=>{
             mutation.call(store, module.state, payload)
+            store._subscribes.forEach(fn => {
+                fn(mutation, rootState)
+            })
         })
 
     })
@@ -88,6 +97,7 @@ function reserStoreVM(store, state) {
 export class Store {
     constructor(options){
         const state = options.state; // 数据变化要更新视图
+        this._subscribes = []
 
         // 存储用户store中所有的 actions mutations getters
         this._actions = {}
@@ -97,48 +107,23 @@ export class Store {
         //1.模块收集   数据得格式化 格式化成我想要得树结构
         this._modules = new ModuleCollection(options)
 
-
         // 2.安装模块  根模块的状态中 要将子模块通过模块名 定义在根模块上
         installModule(this, state, [], this._modules.root)
 
 
         // 3. 将状态和getters 都定义在当前的vm上
         reserStoreVM(this, state)
-
-
         console.log(state)
 
-        // 1.添加状态逻辑 数据在哪使用就会收集对应得依赖
-    //     const computed = {}
+        // 插件依次执行
+        options.plugins.forEach(plugin=>plugin(this))
 
-    //     // 2.实现计算属性 处理getters 使用具有缓存得computed （多次取值如果值不改变不调用方法）
-    //     this.getters = {}
-    //     forEachValue(options.getters, (fn, key)=>{
-    //         computed[key] = () => { // 将用户得getters 定义在实例上
-    //             return fn(this.state)
-    //         }
-    //         Object.defineProperty(this.getters,key,{ // 当我取值时执行计算属性得逻辑
-    //             get: ()=>this._vm[key]
-    //         })
-    //     })
-    //     this._vm = new Vue({
-    //         data: { // 属性如果是$开头 默认不会将这个属性挂载到vm上
-    //             $$state: state // 会将$$state 对应的对象 通过defineProperty进行劫持
-    //         },
-    //         computed
-    //     })
-
-    //     // 3.实现mutations actions
-    //     this.mutations = {}
-    //     this.actions = {}
-    //     forEachValue(options.mutations, (fn,key)=>{
-    //         this.mutations[key] = (payload)=>fn(this.state, payload)
-    //     })
-    //     forEachValue(options.actions, (fn,key)=>{
-    //         this.actions[key] = (payload)=>fn(this,payload)
-    //     })
-    // }
-
+    }
+    replaceState(state) {
+        getState()
+    }
+    subscribe (fn) {
+        this._subscribes.push(fn)
     }
     commit = (type, payload)=>{ // 保证当前this 当前store实例
         // 调用commit其实就是去找 刚才绑定得mutation
